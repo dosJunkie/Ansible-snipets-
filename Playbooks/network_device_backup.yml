@@ -1,0 +1,92 @@
+---
+## Playbook to get system time and append it to backup files
+
+- hosts: localhost
+
+  tasks:
+   - name: Get ansible date/time facts
+     setup:
+       filter: "ansible_date_time"
+       gather_subset: "!all"
+
+   - name: Store DTG as fact
+     set_fact:
+       DTG: "{{ ansible_date_time.date }}"
+
+   - name: Create Directory {{hostvars.localhost.DTG}}
+     file:
+      path: ~/Network-Automation/backups/{{hostvars.localhost.DTG}}
+      state: directory
+  run_once: true
+untitled
+- hosts: Cisco_Devices
+
+  tasks:
+
+   - name: Backup  
+     ios_command:
+       commands: show run  
+     register: config
+
+   - name: Save output to ~/Network-Automation/backups/
+     copy:
+       content: "{{config.stdout[0]}}"
+       dest: "~/Network-Automation/backups/{{hostvars.localhost.DTG}}/{{inventory_hostname}}-{{hostvars.localhost.DTG}}-config.txt"
+       
+# - hosts: Cisco_Devices
+
+#   vars:
+#     command_list:
+#     # - show etherchannel summary 
+#     # - show cdp neigh 
+#     # - sh switch stack-ports
+#     # - sh switch 
+#     # - show environment all
+#     # - show ip ospf int brief 
+#     # - show ip ospf neigh 
+#     # - show cdp neighbors detail
+#     # - show version 
+#     # - show license usage 
+#     # - show clock
+#     # - show users
+#     # - show boot
+#     # - show int status | inc connected
+#     # - show arp
+#     # - show ip interface brief | exc admin
+
+#   tasks:
+#    - name: Run the SHOW commands and save output 
+#      ios_command:
+#        commands: "{{ command_list }}"
+#      register: showoutput
+
+#    - name: "Put all the files together into one nice text file"
+#      template: 
+#        src: template.j2 
+#        dest: "~/Network-Automation/backups/{{hostvars.localhost.DTG}}/{{ inventory_hostname }}-{{hostvars.localhost.DTG}}-showoutput.txt"
+
+# - hosts: Cisco_Devices
+
+#   tasks:
+#    - name: Backup Cisco Devices
+
+#      ios_config:
+#        backup: yes
+#        backup_options:
+#          filename: "{{inventory_hostname}}-{{hostvars.localhost.DTG}}-config.txt"
+#          dir_path: ~/Network-Automation/backups/{{hostvars.localhost.DTG}}
+
+# - hosts: NXOS
+
+#   tasks:
+#    - name: Backup NEXUS with cli_command
+#      cli_command:
+#        command: show run | be ver
+#      register: config 
+
+#    - name: Save output to ~/Network-Automation/backups/
+#      copy:
+#        content: "{{config.stdout}}"
+#        dest: "~/Network-Automation/backups/{{hostvars.localhost.DTG}}/{{inventory_hostname}}-{{hostvars.localhost.DTG}}-config.txt"
+
+

