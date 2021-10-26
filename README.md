@@ -15,7 +15,7 @@ My compilation of useful Ansible code snippets.
 
 # JSON Manipulation and Formatting
 
-```
+~~~yml
 - name: Query json object & assign to variable
    - set_fact: Var='{{ result.stdout | from_json | json_query("Key") }}'
 
@@ -33,4 +33,4 @@ My compilation of useful Ansible code snippets.
 - name: Jinja list debug, printing out the list as comma seperated.
   debug:
     msg: "{% for each in foo_value %}{{ each }}{% if not loop.last %},{% endif %}{% endfor %}"
-```
+~~~
