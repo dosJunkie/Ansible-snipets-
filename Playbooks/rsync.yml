@@ -1,0 +1,35 @@
+# enable & configure authenticationless rsync
+- hosts: test
+  remote_user: dj
+  # vars:
+  #   - hostname: ?
+  #   - command: "/bin/bash"
+  #   - listen_port: ?
+  #   - timezone: "America/New_York"
+  #   - should_reboot: false
+  gather_facts: true
+  become: true
+  # roles:
+  #   - role: ?
+  tasks:
+    - name: Copy rsync config
+      copy:
+        src: resources/rsync.conf
+        dest: /etc/
+        owner: root
+        group: root
+        mode: 0755
+    - name: Restart rsync
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: yes
+        name: rsync
+    # - name: Cleanup unused packages
+    #   apt:
+    #       autoremove: yes
+    # - name: reload installed services
+    #   systemd:
+    #     daemon_reload: yes
+    # - name: reboot to finalize prep
+    #   include_role:
+    #       name: GROG.reboot

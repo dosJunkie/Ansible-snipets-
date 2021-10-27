@@ -1,0 +1,76 @@
+# create telent server. Need to figure out how to disable password auth or weaken auth measures in general
+- hosts: all
+  remote_user: rfabian
+  vars:
+    - hostname: ?
+    - command: "/bin/bash"
+    - listen_port: ?
+    - timezone: "America/New_York"
+    - should_reboot: false        
+  gather_facts: true
+  become: true
+  # roles:
+  #   - role: ?
+  tasks:   
+    - name: Create a login user
+      user:
+        name: telnet
+        password: 'password'
+        groups: 
+          - sudo
+      state: present
+      shell: /bin/bash       # Defaults to /bin/bash
+      system: yes            # Defaults to no
+      createhome: yes        # Defaults to yes
+      home: /home/telnet     # Defaults to /home/<username>
+    - name: Install xinetd
+      apt:
+        name: xinetd
+        state: present
+    - name: Install telnet
+      apt:
+        name: telnetd
+        state: present    
+    - name: Remove telnet config
+      file:
+        path: /etc/xinetd.d/telnet
+        state: absent   
+    - name: Remove xinetd config
+      file:
+        path: /etc/xinetd.conf
+        state: absent   
+    - name: Remove inetd config
+      file:
+        path: /etc/inetd.conf
+        state: absent
+  post_tasks:    
+    - name: Copy telnet config
+      copy:
+        src: resources/telnet
+        dest: /etc/xinetd.d/
+        owner: root
+        group: root
+        mode: 0755   
+    - name: Copy xinetd config 
+      copy:
+        src: resources/xinetd.conf
+        dest: /etc/
+        owner: root
+        group: root
+        mode: 0755  
+    - name: Copy inetd config 
+      copy:
+        src: resources/inetd.conf
+        dest: /etc/
+        owner: root
+        group: root
+        mode: 0755  
+    - name: Cleanup unused packages
+      apt:
+          autoremove: yes
+    - name: reload installed services
+      systemd:
+        daemon_reload: yes
+    - name: reboot to finalize prep
+      include_role:
+          name: GROG.reboot

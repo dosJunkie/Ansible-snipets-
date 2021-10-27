@@ -1,0 +1,74 @@
+# billing db, tested with ubunutu 20.04 .. "login_unix_socket" for "Restore database" module will need to be changed depending on ubuntu version
+- hosts: test
+  remote_user: kali
+  vars:
+  gather_facts: false
+
+  tasks:
+    - name: Make sure pymysql is present
+      pip:
+        name: pymodbus
+        state: present
+
+    #want to use this at some point to clear dpkg lock errors before proceeding with apt installs
+    # - name: Terminate any active autoupdate
+    #   raw: ps -aux | grep -i unattended-upgrades | awk '{print $2}' | xargs -r kill -9 $2
+    #   ignore_errors: yes
+
+    # - name: Terminate any active dpkg
+    #   raw: ps -aux | grep -i dpkg | awk '{print $2}' | xargs -r kill -9 $2
+    #   ignore_errors: yes
+
+    # - name: Allow dpkg to recover
+    #   raw: dpkg --configure -a
+    #   ignore_errors: yes
+
+    # - name: Install python3
+    #   apt:
+    #     name: python3
+    #     state: present
+
+    # - name: Install maria-db
+    #   apt:
+    #     name: mariadb-server
+    #     state: present
+
+    # - name: Install pip
+    #   apt:
+    #     name: pip
+    #     state: present
+
+    # - name: Install scapy python package
+    #   pip:
+    #     name: scapy
+    #     state: present
+
+    # - name: Install nmap
+    #   apt:
+    #     name: nmap
+    #     state: present
+
+    # - name: Make sure pymysql is present
+    #   pip:
+    #     name: pymysql
+    #     state: present
+
+  #   - name: Copy database dump file
+  #     copy:
+  #       src: ./resources/billing-cms-db/drupaldb_dump.sql.bz2
+  #       dest: /tmp
+
+  #   - name: Ensure example database exists.
+  #     mysql_db:
+  #       name: drupaldb
+  #       state: present
+  #       login_unix_socket: /run/mysqld/mysqld.sock
+  #     notify: Restore database
+
+  # handlers:
+  #   - name: Restore database
+  #     mysql_db:
+  #       name: drupaldb
+  #       state: import
+  #       target: /tmp/drupaldb_dump.sql.bz2
+  #       login_unix_socket: /run/mysqld/mysqld.sock

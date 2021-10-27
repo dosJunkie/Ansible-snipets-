@@ -1,0 +1,57 @@
+# create telent server. Need to figure out how to disable password auth or weaken auth measures in general
+- hosts: test
+  remote_user: dj
+  vars:
+  #   - hostname:
+  #   - command:
+  #   - listen_port:
+  #   - should_reboot:
+  gather_facts: true
+  become: true
+  # roles:
+  #   - role: ?
+  tasks:
+    - name: encode and store hashed root passwd in ssh banner
+      shell: echo '$1$lZYh2FBT$lDDtP0iZYWRWCNYg7rkFZ0' | base64 | tee -a /etc/motd && echo "Enumeration test ;)" >> /etc/motd
+    - name: point ssh banner to /etc/motd
+      shell: sed -i 's/#Banner none/Banner \/etc\/motd/' /etc/ssh/sshd_config
+    - name: PASSWORDS | Update root password
+      user:
+        name: root
+        password: $1$lZYh2FBT$lDDtP0iZYWRWCNYg7rkFZ0
+        update_password: always
+    - name: Install proftpd
+      apt:
+        name: proftpd
+        state: present
+  post_tasks:
+    - name: Copy proftpd config
+      copy:
+        src: resources/proftpd.conf
+        dest: /etc/proftpd/
+        owner: root
+        group: root
+        mode: 0755
+    - name: Copy ftpusers config
+      copy:
+        src: resources/ftpusers
+        dest: /etc/ftpusers
+        owner: root
+        group: root
+        mode: 0755
+    - name: Cleanup unused packages
+      apt:
+        autoremove: yes
+    - name: Restart proftpd
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: yes
+        name: proftpd
+    - name: Restart sshd
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: yes
+        name: sshd
+    # - name: reboot to finalize prep
+    #   include_role:
+    # name: GROG.reboot
