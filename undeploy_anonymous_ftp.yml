@@ -1,0 +1,30 @@
+# create telent server. Need to figure out how to disable password auth or weaken auth measures in general
+- hosts: test
+  remote_user: dj
+  # vars:
+  #   - hostname:
+  #   - command:
+  #   - listen_port:
+  #   - should_reboot:
+  gather_facts: true
+  become: true
+  # roles:
+  #   - role: ?
+  tasks:
+    - name: Stop proftpd
+      ansible.builtin.systemd:
+        state: stopped
+        daemon_reload: yes
+        name: proftpd
+    - name: Un-Install proftpd
+      apt:
+        name: proftpd
+        state: absent
+        autoclean: yes
+        force_apt_get: yes
+        force: yes
+        purge: yes
+  post_tasks:
+    - name: Cleanup unused packages
+      apt:
+        autoremove: yes

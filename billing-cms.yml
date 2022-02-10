@@ -1,0 +1,77 @@
+# billing cms. to change pw use {drush upwd user "somepassword"}
+- hosts: test
+  remote_user: dj
+  vars:
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Create a login user
+      user:
+        name: sysadmin
+        password: "password"
+        groups:
+          - sudo
+        state: present
+        shell: /bin/bash
+        system: yes
+        createhome: yes
+        home: /home/sysadmin
+
+    - name: Install packages
+      apt: name={{ item }} state=present
+      with_items:
+        - php
+        - php-curl
+        - php-gd
+        - php-mbstring
+        - php-sqlite3
+        - apache2
+
+    - name: Copy drupal tar ball & apach2 config
+      copy: src={{ item.src }} dest={{ item.dest }}
+      with_items:
+        - {
+            src: "resources/billing-cms-db/drupal-7.40.tar.gz",
+            dest: /var/www/,
+            owner: root,
+            group: root,
+            mode: 0755,
+          }
+        - {
+            src: "resources/billing-cms-db/drupal.conf",
+            dest: /etc/apache2/sites-available/,
+            owner: root,
+            group: root,
+            mode: 0755,
+          }
+
+    - name: Unarchive a file that is already on the remote machine
+      unarchive:
+        src: /var/www/drupal-7.40.tar.gz
+        dest: /var/www/
+        remote_src: yes
+
+    - name: Remove tar file
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /var/www/drupal-7.40.tar.gz
+        - /etc/apache2/sites-available/000-default.conf
+        - /etc/apache2/sites-available/default-ssl.conf
+        - /etc/apache2/sites-enabled/000-default.conf
+        - /etc/apache2/sites-enabled/default-ssl.conf
+
+    - name: Create sym link for drupal.conf
+      shell: "{{ item }}"
+      with_items:
+        - sudo ln -s /etc/apache2/sites-available/drupal.conf /etc/apache2/sites-enabled/drupal.conf
+        - sudo ln -s /etc/apache2/mods-available/rewrite.load /etc/apache2/mods-enabled/rewrite.load
+      ignore_errors: yes
+
+    - name: Restart apache2
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: yes
+        name: apache2

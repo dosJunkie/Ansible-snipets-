@@ -1,0 +1,84 @@
+- hosts: win-blue-frenemy
+  gather_facts: yes
+  vars:
+    - default_install_location: "c:\\ProgramFiles\\"
+    - winlogbeat_working_dir: "C:\\ProgramData\\chocolatey\\lib\\winlogbeat\\tools\\"
+    - winlogbeat_yaml_file: "winlogbeat.yml"
+    - chocolatey_beat_location: "C:\\ProgramData\\chocolatey\\lib\\winlogbeat\\tools\\"
+    - sysmon_download_url_base: "https://download.sysinternals.com/files"
+    - sysmon_working_dir: "c:\\Program Files\\sysmon\\"
+    - sysmon_download_file: Sysmon
+    - file_ext: .zip
+    - sysmon_config_url: "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml"
+
+  tasks:
+    # - name: Get system info(optional)
+    #   debug: var=[ip_addresses]
+
+    # - name: copy file to Desktop(optional)
+    #   win_copy:
+    #     src: resources/PartyLoud
+    #     dest: C:\Users\admin1\Desktop\
+
+    # - name: Install Choco Pkg manager(optional)
+    #   win-shell: Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+
+    - name: install winlogbeat(optional)
+      win_chocolatey:
+        name: winlogbeat
+        state: present
+
+    - name: Copy winlog beat to program files
+      win_copy:
+        src: "{{ chocolatey_beat_location }}"
+        dest: "{{ default_install_location }}"
+        remote_src: True
+
+    - name: Remove winlog yml file, if present
+      win_file:
+        path: "{{ winlogbeat_working_dir }}/{{ winlogbeat_yaml_file }}"
+        state: absent
+
+    - name: Copy updated winlogbeat YML file to machine
+      win_copy:
+        src: "resources/{{ winlogbeat_yaml_file }}"
+        dest: "{{ winlogbeat_working_dir }}/{{ winlogbeat_yaml_file }}"
+
+    - name: Set execution policy & install winlogbeat
+      win_shell: cd "{{ winlogbeat_working_dir }}" ; Set-ExecutionPolicy -Scope Process -ExecutionPolicy bypass -Force ; .\install-service-winlogbeat.ps1
+
+    - name: Set winlogbeat service startup mode to auto and ensure it is started
+      win_shell: Start-Service winlogbeat
+
+    - name: Create sysmon directory
+      win_file:
+        path: "{{ sysmon_working_dir }}"
+        state: directory
+
+    - name: Get sysmon zip
+      win_get_url:
+        url: "{{ sysmon_download_url_base }}/{{ sysmon_download_file }}{{ file_ext }}"
+        dest: "{{ sysmon_working_dir }}/{{ sysmon_download_file }}{{ file_ext }}"
+
+    - name: Unzip sysmon
+      win_unzip:
+        src: "{{ sysmon_working_dir }}/{{ sysmon_download_file }}{{ file_ext }}"
+        dest: "{{ sysmon_working_dir }}"
+
+    - name: Copy sysmon config
+      win_get_url:
+        url: "{{ sysmon_config_url }}"
+        dest: "{{ sysmon_working_dir }}"
+
+    - name: check sysmon service
+      win_service:
+        name: sysmon64
+      register: result
+      failed_when: result is not defined
+      ignore_errors: yes
+
+    - name: Run sysmon
+      win_command: " .\\Sysmon64.exe -accepteula -i .\\sysmonconfig-export.xml "
+      args:
+        chdir: "{{ sysmon_working_dir }}"
+      when: result.state is not defined or result.name is not defined

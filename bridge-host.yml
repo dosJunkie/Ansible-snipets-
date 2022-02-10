@@ -1,0 +1,45 @@
+# bridge hosts configuration
+# RUN THIS ON EACH BRIDGE HOST SEPERATELY IF ALL BRIDGEHOSTS WILL HAVE DIFFERENT USERNAME/PASSWORDS
+# make sure you edit username and password to your liking BEFORE RUNNING
+- hosts: test
+  remote_user: kali
+  vars:
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Create a sysadmin user
+      user:
+        name: sysadmin
+        password: "test"
+        groups:
+          - sudo
+        state: present
+        shell: /bin/bash
+        system: yes
+        createhome: yes
+        home: /home/sysadmin
+
+    - name: Copy bridge-host configs
+      copy: src={{ item.src }} dest={{ item.dest }}
+      with_items:
+        - {
+            src: "resources/bridgehost-files/dump.pcap",
+            dest: "/home/sysadmin/",
+          }
+        - {
+            src: "resources/bridgehost-files/dump2.pcap",
+            dest: "/home/sysadmin/",
+          }
+        - { src: "resources/bridgehost-files/rlinetd.conf", dest: "/etc/" }
+
+    - name: Install rlinetd if not installed
+      apt:
+        name: rlinetd
+        state: present
+
+    - name: Restart rlinetd
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: yes
+        name: rlinetd
